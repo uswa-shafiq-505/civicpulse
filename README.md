@@ -100,3 +100,6 @@ pytest -v --cov=app --cov-report=term-missing
   what preserves its ability to reach a hosted LLM like Groq. This is the
   trade-off the assignment explicitly asks you to work out and document in
   an ADR (not yet written).
+  
+## Git workflow
+`main` is protected and requires a pull request before merging. Because I am working solo on a free GitHub account, GitHub does not permit self-approval, so PRs are merged without a formal reviewer approval; all other required checks (CI, no direct pushes) remain enforced.
