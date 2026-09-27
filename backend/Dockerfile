@@ -15,6 +15,7 @@ RUN groupadd --gid 1000 app && useradd --uid 1000 --gid app --shell /bin/bash --
 COPY --from=builder /install /usr/local
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 COPY app/ ./app/
 COPY alembic/ ./alembic/
 COPY alembic.ini .
