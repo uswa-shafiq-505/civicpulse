@@ -1,0 +1,83 @@
+# Production overlay. No `build:` anywhere -- immutable, pre-built images
+# tagged by commit SHA (IMAGE_TAG), pushed by cd.yml. No published DB/cache
+# ports. No dev bind mount.
+
+networks:
+  edge:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true
+
+volumes:
+  pgdata:
+  redisdata:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    networks: [internal]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 512M }
+
+  redis:
+    image: redis:7-alpine
+    networks: [internal]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
+
+  backend:
+    image: ghcr.io/OWNER/civicpulse-backend:${IMAGE_TAG}
+    networks: [edge, internal]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      TRIAGE_PROVIDER: ${TRIAGE_PROVIDER}
+      LLM_API_KEY: ${LLM_API_KEY}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 512M }
+
+  frontend:
+    image: ghcr.io/OWNER/civicpulse-frontend:${IMAGE_TAG}
+    networks: [edge]
+    ports:
+      - "80:80"
+    depends_on:
+      backend: { condition: service_healthy }
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 128M }

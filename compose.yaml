@@ -1,0 +1,83 @@
+# Development compose file. Uses `build:` so you're running your local source.
+# Frontend service is added once frontend/ exists (see README "Status").
+
+networks:
+  edge:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true   # no route to the outside world -- backend/db/cache only
+
+volumes:
+  pgdata:
+  redisdata:
+  ollama_models:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    networks: [internal]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-civicpulse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-civicpulse}
+      POSTGRES_DB: ${POSTGRES_DB:-civicpulse}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-civicpulse}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    # No published port here -- nothing outside `internal` should reach Postgres directly.
+
+  redis:
+    image: redis:7-alpine
+    networks: [internal]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    networks: [edge, internal]   # the ONLY service that bridges both networks
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-civicpulse}:${POSTGRES_PASSWORD:-civicpulse}@postgres:5432/${POSTGRES_DB:-civicpulse}
+      REDIS_URL: redis://redis:6379/0
+      TRIAGE_PROVIDER: ${TRIAGE_PROVIDER:-rules}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.groq.com/openai/v1}
+      LLM_MODEL: ${LLM_MODEL:-llama-3.1-8b-instant}
+    ports:
+      - "8000:8000"   # dev convenience; remove once frontend/nginx proxies /api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    volumes:
+      - ./backend/app:/app/app:ro   # dev-only hot-reload mount; absent from compose.prod.yaml
+
+  # ollama:
+  #   image: ollama/ollama:0.3.14
+  #   networks: [internal]
+  #   volumes:
+  #     - ollama_models:/root/.ollama
+  #   restart: unless-stopped
+  #   # Note: `internal: true` means this container has no route to the
+  #   # internet either -- fine for Ollama (fully offline), but see the ADR
+  #   # on where LLMTriage (which DOES need internet) should live.
