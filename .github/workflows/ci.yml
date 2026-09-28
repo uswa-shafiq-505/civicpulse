@@ -43,6 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TRIAGE_PROVIDER: simulated
+      PYTHONPATH: backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
