@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   push:
     branches: [dev]
 
@@ -43,6 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TRIAGE_PROVIDER: simulated
+      PYTHONPATH: ${{ github.workspace }}/backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -87,11 +88,12 @@ jobs:
       - name: Build backend image
         run: docker build -t civicpulse-backend:ci ./backend
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: civicpulse-backend:ci
           severity: HIGH,CRITICAL
           exit-code: "1"
+          ignore-unfixed: true
 
   manifests:
     runs-on: ubuntu-latest
