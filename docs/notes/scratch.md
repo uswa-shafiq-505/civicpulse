@@ -34,6 +34,13 @@
 - Also discovered on Day 5: the backend image has neither `ping` nor `wget`, so isolation checks must use Python — `socket.gethostbyname('postgres')` and `urllib.request.urlopen(...)`.
 - Also discovered: `db-init` needs both `working_dir: /app` and `PYTHONPATH: /app`, or `alembic` cannot import `app.config` and fails with `ModuleNotFoundError: No module named 'app'`.
 
+## Day 6
+- Broke: CI failed with `ModuleNotFoundError: No module named 'app'` — `PYTHONPATH: backend` was relative to the workspace root, so with `working-directory: backend` it resolved to `backend/backend`.
+- Believed: the test file needed editing.
+- Actual: the CI env var needed an absolute path. Fixed with `PYTHONPATH: ${{ github.workspace }}/backend`.
+- Second failure: `react-hooks/set-state-in-effect` ESLint rule fired on `setState` inside `useEffect`. Disabled in `eslint.config.js` with a documented decision.
+- Third failure: `aquasecurity/trivy-action@0.24.0` did not resolve. The release tags carry a `v` prefix, so `0.24.0` / `0.28.0` do not exist. Fixed with `@v0.36.0`.
+
 ## Redis volume justification (§2.4)
 
 Redis does two jobs in CivicPulse. The stats cache could be rebuilt from Postgres
