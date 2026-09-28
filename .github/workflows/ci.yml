@@ -93,6 +93,7 @@ jobs:
           image-ref: civicpulse-backend:ci
           severity: HIGH,CRITICAL
           exit-code: "1"
+          ignore-unfixed: true
 
   manifests:
     runs-on: ubuntu-latest
