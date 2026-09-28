@@ -1,6 +1,10 @@
+﻿node_modules/
+dist/
 .env
-*.zip
+.venv/
 __pycache__/
 *.pyc
-.venv/
-node_modules/
+.DS_Store
+
+*.docx
+~$*.docx
