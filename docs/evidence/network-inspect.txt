@@ -1,0 +1,6 @@
+﻿
+        "Name": "civicpulse_internal",
+        "Internal": true,
+            "com.docker.compose.network": "internal",
+
+
