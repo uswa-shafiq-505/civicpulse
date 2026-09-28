@@ -1,83 +1,76 @@
-# Production overlay. No `build:` anywhere -- immutable, pre-built images
-# tagged by commit SHA (IMAGE_TAG), pushed by cd.yml. No published DB/cache
-# ports. No dev bind mount.
-
-networks:
-  edge:
-    driver: bridge
-  internal:
-    driver: bridge
-    internal: true
-
-volumes:
-  pgdata:
-  redisdata:
-
+# Production compose: images come from the registry, tagged by immutable commit SHA. No build:, no bind mounts.
+# Dev bind mounts (compose.yaml) hot-reload local source; in prod they would let the host filesystem
+# override the image, defeating "the image is the artifact".
 services:
   postgres:
-    image: postgres:16-alpine
-    networks: [internal]
+    image: postgres:16.6-alpine                 # VERIFY: use the exact tag from compose.yaml
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+    volumes: [pgdata:/var/lib/postgresql/data]
+    networks: [internal]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 10
     restart: unless-stopped
-    deploy:
-      resources:
-        limits: { cpus: "1.0", memory: 512M }
+    deploy: { resources: { limits: { cpus: "1.0", memory: 512M } } }
 
   redis:
-    image: redis:7-alpine
-    networks: [internal]
+    image: redis:7.4-alpine                     # VERIFY tag
     command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+    volumes: [redisdata:/data]
+    networks: [internal]
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 10 }
     restart: unless-stopped
-    deploy:
-      resources:
-        limits: { cpus: "0.5", memory: 256M }
+    deploy: { resources: { limits: { cpus: "0.5", memory: 256M } } }
+
+  db-init:
+    image: ${REGISTRY_PREFIX}/civicpulse-backend:${IMAGE_TAG:?set IMAGE_TAG to a commit SHA}
+    command: ["sh", "-c", "alembic upgrade head && python scripts/seed.py"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    networks: [internal]
+    depends_on: { postgres: { condition: service_healthy } }
+    restart: "no"
 
   backend:
-    image: ghcr.io/OWNER/civicpulse-backend:${IMAGE_TAG}
-    networks: [edge, internal]
-    environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://redis:6379/0
+    image: ${REGISTRY_PREFIX}/civicpulse-backend:${IMAGE_TAG:?set IMAGE_TAG to a commit SHA}
+    environment:                                # mirror the backend env block from compose.yaml, values via ${...}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
       TRIAGE_PROVIDER: ${TRIAGE_PROVIDER}
       LLM_API_KEY: ${LLM_API_KEY}
+      LLM_BASE_URL: ${LLM_BASE_URL}
+      LLM_MODEL: ${LLM_MODEL}
+    networks: [edge, internal]
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      db-init: { condition: service_completed_successfully }
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 10s
       timeout: 3s
       retries: 5
     restart: unless-stopped
-    deploy:
-      resources:
-        limits: { cpus: "1.0", memory: 512M }
+    deploy: { resources: { limits: { cpus: "1.0", memory: 512M } } }
 
   frontend:
-    image: ghcr.io/OWNER/civicpulse-frontend:${IMAGE_TAG}
+    image: ${REGISTRY_PREFIX}/civicpulse-frontend:${IMAGE_TAG:?set IMAGE_TAG to a commit SHA}
+    ports: ["80:8080"]
     networks: [edge]
-    ports:
-      - "80:80"
-    depends_on:
-      backend: { condition: service_healthy }
+    depends_on: { backend: { condition: service_healthy } }
+    healthcheck: { test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"], interval: 10s, timeout: 3s, retries: 5 }
     restart: unless-stopped
-    deploy:
-      resources:
-        limits: { cpus: "0.5", memory: 128M }
+    deploy: { resources: { limits: { cpus: "0.5", memory: 128M } } }
+
+networks:
+  edge: { driver: bridge }
+  internal: { driver: bridge, internal: true }
+
+volumes:
+  pgdata:
+  redisdata:
