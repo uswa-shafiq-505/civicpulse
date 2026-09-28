@@ -1,5 +1,5 @@
 # Development compose file. Uses `build:` so you're running your local source.
-# Frontend service is added once frontend/ exists (see README "Status").
+# Frontend service proxies /api to the backend over the `edge` network.
 
 networks:
   edge:
@@ -29,7 +29,6 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
-    # No published port here -- nothing outside `internal` should reach Postgres directly.
 
   redis:
     image: redis:7-alpine
@@ -43,6 +42,18 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+
+  db-init:
+    build: ./backend
+    working_dir: /app
+    command: ["sh", "-c", "alembic upgrade head && python scripts/seed.py"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-civicpulse}:${POSTGRES_PASSWORD:-civicpulse}@postgres:5432/${POSTGRES_DB:-civicpulse}
+      PYTHONPATH: /app
+    networks: [internal]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
 
   backend:
     build:
@@ -59,10 +70,9 @@ services:
     ports:
       - "8000:8000"   # dev convenience; remove once frontend/nginx proxies /api
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      db-init: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -72,12 +82,25 @@ services:
     volumes:
       - ./backend/app:/app/app:ro   # dev-only hot-reload mount; absent from compose.prod.yaml
 
+  frontend:
+    build: ./frontend
+    ports: ["3000:8080"]
+    networks: [edge]
+    depends_on:
+      backend: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 128M }
+
   # ollama:
   #   image: ollama/ollama:0.3.14
   #   networks: [internal]
   #   volumes:
   #     - ollama_models:/root/.ollama
   #   restart: unless-stopped
-  #   # Note: `internal: true` means this container has no route to the
-  #   # internet either -- fine for Ollama (fully offline), but see the ADR
-  #   # on where LLMTriage (which DOES need internet) should live.
