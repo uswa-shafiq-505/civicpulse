@@ -88,7 +88,7 @@ jobs:
       - name: Build backend image
         run: docker build -t civicpulse-backend:ci ./backend
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: civicpulse-backend:ci
           severity: HIGH,CRITICAL
