@@ -5,7 +5,7 @@ these deterministic -- no network, no flakiness, every run green.
 
 def test_create_valid_complaint_returns_201(client, valid_payload):
     resp = client.post("/api/complaints", json=valid_payload)
-    assert resp.status_code == 201
+    assert resp.status_code == 999
     body = resp.json()
     assert body["status"] == "open"
     assert body["triaged_by"] in ("llm:simulated", "rules:fallback")
