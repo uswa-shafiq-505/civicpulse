@@ -1,6 +1,7 @@
 # ---- build stage: Node lives and dies here ----
 FROM node:22-alpine AS build
 WORKDIR /app
+RUN echo "legacy-peer-deps=true" > .npmrc
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
