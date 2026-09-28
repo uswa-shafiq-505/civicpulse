@@ -1,12 +1,25 @@
-import { useEffect, useState } from 'react'
-import { getStats } from './api/client'
+import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
+import SubmitPage from './pages/SubmitPage'
+import DashboardPage from './pages/DashboardPage'
+import StatsPage from './pages/StatsPage'
+import ProvidersPage from './pages/ProvidersPage'
+
 
 export default function App() {
-  const [out, setOut] = useState('loading…')
-  useEffect(() => {
-    getStats()
-      .then(r => setOut(`X-Cache=${r.headers.get('X-Cache')}\n${JSON.stringify(r.data, null, 2)}`))
-      .catch(e => setOut(String(e)))
-  }, [])
-  return <pre>{out}</pre>
+  return (
+    <BrowserRouter>
+      <nav>
+        <NavLink to="/">Submit</NavLink>
+        <NavLink to="/dashboard">Dashboard</NavLink>
+        <NavLink to="/stats">Stats</NavLink>
+        <NavLink to="/providers">Providers</NavLink>
+      </nav>
+      <Routes>
+        <Route path="/" element={<SubmitPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/stats" element={<StatsPage />} />
+        <Route path="/providers" element={<ProvidersPage />} />
+      </Routes>
+    </BrowserRouter>
+  )
 }
