@@ -41,6 +41,25 @@
 - Second failure: `react-hooks/set-state-in-effect` ESLint rule fired on `setState` inside `useEffect`. Disabled in `eslint.config.js` with a documented decision.
 - Third failure: `aquasecurity/trivy-action@0.24.0` did not resolve. The release tags carry a `v` prefix, so `0.24.0` / `0.28.0` do not exist. Fixed with `@v0.36.0`.
 
+## Day 7
+- Broke: ingress unreachable from Windows — `curl civicpulse.local` returned "Connection refused" on port 80.
+- Believed: ingress-nginx was not installed.
+- Actual: the kind cluster was created without `extraPortMappings`, so host port 80 was never bound to the node. Recreated with `kind-config.yaml` mapping 80 and 443.
+- Broke: `/api/stats` returned 404 through the ingress.
+- Believed: backend route path was wrong.
+- Actual: `rewrite-target: /$2` on the Ingress stripped the `/api` prefix, so the backend received `/stats` and FastAPI returned 404. Removed the annotation and switched to `pathType: Prefix`.
+- Broke: `/api/stats` returned 500 after fixing the path.
+- Believed: database was down.
+- Actual: `k8s/base/secret.yaml` had no `DATABASE_URL` key, so the backend defaulted to `CHANGE_ME:CHANGE_ME`. Added `DATABASE_URL` and `REDIS_URL` to the Secret, with dev values supplied by a `k8s/overlays/dev/secret.yaml`.
+- Broke: after fixing the Secret, Postgres rejected `civicpulse` with `password authentication failed`.
+- Believed: the Secret had not propagated.
+- Actual: Postgres reads `POSTGRES_USER` and `POSTGRES_PASSWORD` only on first initialisation. The data directory already existed with `CHANGE_ME` credentials from the first cluster setup. Changing the Secret does not update an already-initialised database.
+- Fixed: deleted the `postgres` StatefulSet and its PVC (`pgdata-postgres-0`), then reapplied. The StatefulSet recreated the PVC from `volumeClaimTemplates`, and Postgres re-initialised with the current Secret values.
+- Also: `secretGenerator` with `behavior: replace` failed with "does not exist; cannot merge or replace" because the base Secret lacked namespace metadata. Switched to a dev-only Secret file listed under `resources:`.
+- Also: the ConfigMap duplicated `DATABASE_URL` and `REDIS_URL`, so two sources defined the same env var. Removed them from the ConfigMap; the Secret is now the single source.
+- Also: `alembic upgrade head` inside the pod needed `cd /app && PYTHONPATH=/app` — same lesson as CI on Day 6.
+- Also: VPA admission controller stuck on missing `vpa-tls-certs` secret; upstream `deploy/` has no certgen Job. Skipped — `vpa-recommender` alone is enough for `updateMode: Off`.
+
 ## Redis volume justification (§2.4)
 
 Redis does two jobs in CivicPulse. The stats cache could be rebuilt from Postgres
