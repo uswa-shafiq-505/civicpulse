@@ -1,0 +1,79 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  build-push:
+    runs-on: ubuntu-latest
+    needs: [test]
+    outputs:
+      backend_digest: ${{ steps.build-backend.outputs.digest }}
+      frontend_digest: ${{ steps.build-frontend.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build-backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/civicpulse-backend:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/civicpulse-backend:latest
+      - id: build-frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/civicpulse-frontend:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/civicpulse-frontend:latest
+
+  deploy-kind:
+    runs-on: ubuntu-latest
+    needs: [build-push]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: civicpulse
+          config: kind-config.yaml
+      - name: Install ingress-nginx
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+          kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=180s
+      - name: Deploy with SHA tag
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          REGISTRY_PREFIX: ghcr.io/${{ github.repository_owner }}
+          DATABASE_URL: postgresql+psycopg://civicpulse:civicpulse@postgres:5432/civicpulse
+          REDIS_URL: redis://redis:6379/0
+          TRIAGE_PROVIDER: rules
+          LLM_API_KEY: unused
+          LLM_BASE_URL: https://api.groq.com/openai/v1
+          LLM_MODEL: llama-3.1-8b-instant
+        run: |
+          kubectl apply -k k8s/overlays/prod
+          kubectl rollout status deployment/backend -n civicpulse --timeout=180s
+          kubectl rollout status deployment/frontend -n civicpulse --timeout=180s
+      - name: Smoke test
+        run: |
+          kubectl get pods -n civicpulse
+          kubectl get hpa -n civicpulse
+          kubectl run smoke --rm -i --restart=Never --image=curlimages/curl -- \
+            curl -sf http://backend.civicpulse.svc.cluster.local:8000/ready
