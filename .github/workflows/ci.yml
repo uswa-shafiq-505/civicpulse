@@ -2,9 +2,10 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, dev]
+    branches: [main, dev]   # added dev so feature PRs trigger CI
   push:
     branches: [dev]
+  workflow_call:            # allows cd.yml to reuse this workflow
 
 permissions:
   contents: read
