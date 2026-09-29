@@ -1,0 +1,32 @@
+﻿### LIST
+{"items":[{"id":"480b4c4d-53ee-4837-9dfd-4adfeef81359","text":"Street lights are out on Main Boulevard near the park since last night.","location":"Main Boulevard","reporter_contact":null,"category":"streetlights","priority":"normal","status":"rejected","ai_summary":"Street lights out on Main Boulevard near the park since last night.","triaged_by":"llm:groq","triage_latency_ms":0,"created_at":"2026-09-27T19:24:48.854770Z","updated_at":"2026-09-28T06:34:50.764029Z"},{"id":"05854e71-ff00-4429-8284-562f28655778","text":"Street lights are out on Main Boulevard near the park since last night.","location":"Main Boulevard","reporter_contact":null,"category":"streetlights","priority":"normal","status":"open","ai_summary":"Street lights out on Main Boulevard near the park since last night.","triaged_by":"llm:groq","triage_latency_ms":1413,"created_at":"2026-09-27T19:23:43.236272Z","updated_at":"2026-09-27T19:23:43.236289Z"}],"total":37,"page":1,"page_size":2}
+### STATS (headers + body)
+HTTP/1.1 200 OK
+date: Mon, 28 Sep 2026 06:35:40 GMT
+server: uvicorn
+content-length: 152
+content-type: application/json
+x-cache: MISS
+x-request-id: 31661919-784b-431f-b0b6-7f3c82226c78
+
+{"total":37,"by_category":{"roads":6,"water":9,"sanitation":7,"electricity":6,"streetlights":8,"other":1},"by_priority":{"low":8,"normal":12,"high":17}}
+### PROVIDERS
+{"active_provider":"llm","recent_triages":[{"provider":"llm:groq","latency_ms":1413,"fallback":false}]}
+### 400 BODY
+HTTP/1.1 400 Bad Request
+date: Mon, 28 Sep 2026 06:35:40 GMT
+server: uvicorn
+content-length: 185
+content-type: application/json
+x-request-id: ee61a375-293c-4d03-ac08-90696e62f1b6
+
+{"detail":"validation error","errors":[{"field":"text","message":"String should have at least 10 characters"},{"field":"location","message":"String should have at least 3 characters"}]}
+### 409 BODY
+HTTP/1.1 409 Conflict
+date: Mon, 28 Sep 2026 06:35:40 GMT
+server: uvicorn
+content-length: 61
+content-type: application/json
+x-request-id: f6522a5d-4ad9-420f-a844-2c98b8ec9bdd
+
+{"detail":"invalid transition from 'rejected' to 'resolved'"}

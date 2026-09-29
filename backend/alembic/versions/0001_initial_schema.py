@@ -22,6 +22,7 @@ category_enum = postgresql.ENUM(
 priority_enum = postgresql.ENUM("high", "normal", "low", name="priority_enum", create_type=False)
 status_enum = postgresql.ENUM("open", "in_progress", "resolved", "rejected", name="status_enum", create_type=False)
 
+
 def upgrade() -> None:
     bind = op.get_bind()
     category_enum.create(bind, checkfirst=True)
