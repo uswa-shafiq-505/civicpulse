@@ -8,3 +8,5 @@ __pycache__/
 
 *.docx
 ~$*.docx
+
+autoscaler/
