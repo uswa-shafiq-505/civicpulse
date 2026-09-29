@@ -12,6 +12,7 @@ permissions:
 jobs:
   test:
     uses: ./.github/workflows/ci.yml
+    secrets: inherit
 
   build-push:
     runs-on: ubuntu-latest
@@ -57,7 +58,7 @@ jobs:
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
           kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=180s
-          - name: Install VPA CRD
+      - name: Install VPA CRD
         run: |
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/autoscaler/master/vertical-pod-autoscaler/deploy/vpa-v1-crd-gen.yaml
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/autoscaler/master/vertical-pod-autoscaler/deploy/vpa-rbac.yaml
