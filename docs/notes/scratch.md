@@ -82,6 +82,19 @@ Our observed recommendation for the backend container was:
 
 We applied the Target to `k8s/base/backend.yaml`'s `resources.requests.cpu` and `resources.requests.memory` in a separate commit. If the recommender later reports a different target, that is expected — it is adapting to real usage, and the loop is: read the recommendation, decide, update the manifest, commit.
 
+
+## Day 9 — VPA recommender loop
+
+Re-ran `kubectl describe vpa backend-vpa -n civicpulse` after a 5-minute burst of real traffic through `POST /api/complaints`.
+
+Day 8 recommendation: Target cpu 25m / memory 250Mi; Upper cpu 53m / memory ~584Mi (converted from bytes).
+Day 9 recommendation: Target cpu 25m / memory 250Mi; Upper cpu 46m / memory 531683325 bytes ≈ 507Mi.
+
+No change in the Target. The recommender is converging on the Day 8 values, which is expected — convergence typically takes 24–48 hours of observed usage. `updateMode: Off` stays in place, so nothing is applied automatically; a human decides when to re-align requests.
+
+Behaviour confirming recommender mode is passive: pod UIDs were unchanged across the check (`kubectl get pods -n civicpulse`), no evictions, no restarts. An `Auto`-mode VPA would have restarted the pods and rewritten their CPU requests without human input — the feedback loop we avoid because the HPA acts on the same signal (see Day 8 conflict note).
+
+
 ## Redis volume justification (§2.4)
 
 Redis does two jobs in CivicPulse. The stats cache could be rebuilt from Postgres
