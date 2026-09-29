@@ -94,6 +94,35 @@ No change in the Target. The recommender is converging on the Day 8 values, whic
 
 Behaviour confirming recommender mode is passive: pod UIDs were unchanged across the check (`kubectl get pods -n civicpulse`), no evictions, no restarts. An `Auto`-mode VPA would have restarted the pods and rewritten their CPU requests without human input — the feedback loop we avoid because the HPA acts on the same signal (see Day 8 conflict note).
 
+- Note: commits for `8.4_review-merge.png` and `9.1_review-merge.png` went directly to `dev` on <date>. Minor process slip; noted and avoided going forward.
+
+
+## Day 10 — CD pipeline
+
+Wrote `.github/workflows/cd.yml` and `.github/workflows/release.yml`.
+
+`cd.yml` runs on push to `main` (i.e. when a `dev → main` release PR is merged). It has three jobs:
+
+1. `test` — reuses `ci.yml` via `workflow_call:` so nothing is published from code that has not passed the test suite. The `needs: [test]` on `build-push` is what enforces this.
+2. `build-push` — builds both images with `docker/build-push-action@v5`, logs in to GHCR with `GITHUB_TOKEN`, pushes tagged `${{ github.sha }}` and `:latest`. The SHA tag is the one that gets deployed; `:latest` is pushed but never deployed, so "what is production running?" always has a one-word answer.
+3. `deploy-kind` — spins up an ephemeral kind cluster in the runner, installs ingress-nginx, applies `k8s/overlays/prod` with `IMAGE_TAG=${{ github.sha }}` and `REGISTRY_PREFIX=ghcr.io/${{ github.repository_owner }}`, waits on `kubectl rollout status --timeout=180s` for both Deployments, then runs a smoke test by curling `/ready` from inside the cluster.
+
+`release.yml` runs on tag `v*`. It builds and pushes images tagged with the semver tag (`${{ github.ref_name }}`) and creates a GitHub release with auto-generated notes.
+
+Least-privilege permissions block: `contents: read`, `packages: write`, `id-token: write`. No account passwords — the registry auth is the ephemeral `GITHUB_TOKEN` with the workflow's own package scope.
+
+**Rollback — two mechanisms**
+
+The imperative one: `kubectl rollout undo deployment/backend -n civicpulse`. Runs in seconds; uses the previous ReplicaSet already in the cluster's history. This is the answer at 3 a.m. when a deploy is broken and you need the service back immediately.
+
+The declarative one: re-apply `k8s/overlays/prod` with the previous commit's SHA — `IMAGE_TAG=<previous-sha> kubectl apply -k k8s/overlays/prod`. Slower, but it records the reversal in Git, so `git log` reflects what production was running at every point. This is the correct answer once the fire is out.
+
+Both are demonstrated in the demo video: imperative first to stop the bleeding, declarative after to make the history auditable.
+
+**Note on the ephemeral cluster in CI**
+
+The `deploy-kind` job creates a kind cluster that dies with the runner. It is not a production deployment — it is proof that the manifests and the image work end-to-end on a clean Kubernetes cluster, which is what CI is for. The production path in this project is the Kubernetes manifests in `k8s/overlays/prod`, deployed by the same commands the job runs.
+
 
 ## Redis volume justification (§2.4)
 
