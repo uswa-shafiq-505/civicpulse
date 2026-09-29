@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: civicpulse
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: backend
+          image: ghcr.io/OWNER/civicpulse-backend:REPLACED_BY_KUSTOMIZE
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: civicpulse-config
+          env:
+            # $(VAR) substitution below only resolves variables defined
+            # earlier in THIS env list -- it does NOT see envFrom values.
+            # This is a genuine Kubernetes limitation, not a typo: if you
+            # try to build DATABASE_URL from envFrom secret values
+            # directly, it silently renders as a literal "$(POSTGRES_USER)"
+            # string instead of substituting. Re-declaring each secret key
+            # explicitly via valueFrom, in order, before DATABASE_URL is
+            # the fix.
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: civicpulse-secrets, key: POSTGRES_USER } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: civicpulse-secrets, key: POSTGRES_PASSWORD } }
+            - name: POSTGRES_DB
+              valueFrom: { secretKeyRef: { name: civicpulse-secrets, key: POSTGRES_DB } }
+            - name: LLM_API_KEY
+              valueFrom: { secretKeyRef: { name: civicpulse-secrets, key: LLM_API_KEY } }
+            - name: DATABASE_URL
+              value: "postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)"
+            - name: REDIS_URL
+              value: "redis://redis:6379/0"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          startupProbe:
+            httpGet: { path: /health, port: 8000 }
+            failureThreshold: 30
+            periodSeconds: 2
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /ready, port: 8000 }
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: civicpulse
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000
